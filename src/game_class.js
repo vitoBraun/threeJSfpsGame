@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
-
+import * as CANNON from "cannon-es";
+import CannonDebugger from "cannon-es-debugger";
 const NORMAL_MOVE_SPEED = 400.0;
 const STRAIF_MOVE_SPEED = NORMAL_MOVE_SPEED * 2;
 const MASS = 70.0;
@@ -15,32 +16,18 @@ class Camera extends THREE.PerspectiveCamera {
   constructor() {
     super(75, window.innerWidth / window.innerHeight, 1, 1000);
     this.position.y = 10;
+    this.position.z = 20;
+    this.position.x = 20;
   }
 }
 
 class Floor {
-  vertex = new THREE.Vector3();
   position;
-  floor;
+  mesh;
   constructor() {
-    let floorGeometry = new THREE.PlaneGeometry(2000, 2000, 100, 100);
-    floorGeometry.rotateX(-Math.PI / 2);
+    let floorGeometry = new THREE.CircleGeometry(500, 20);
 
-    // vertex displacement
-
-    this.position = floorGeometry.attributes.position;
-
-    for (let i = 0, l = this.position.count; i < l; i++) {
-      this.vertex.fromBufferAttribute(this.position, i);
-
-      this.vertex.x += Math.random() * 20 - 10;
-      this.vertex.y += Math.random() * 2;
-      this.vertex.z += Math.random() * 20 - 10;
-
-      this.position.setXYZ(i, this.vertex.x, this.vertex.y, this.vertex.z);
-    }
-
-    floorGeometry = floorGeometry.toNonIndexed(); // ensure each face has unique vertices
+    floorGeometry = floorGeometry.toNonIndexed();
 
     this.position = floorGeometry.attributes.position;
     const colorsFloor = [];
@@ -62,7 +49,7 @@ class Floor {
 
     const floorMaterial = new THREE.MeshBasicMaterial({ vertexColors: true });
 
-    this.floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    this.mesh = new THREE.Mesh(floorGeometry, floorMaterial);
   }
 
   setPosition(value) {
@@ -231,14 +218,14 @@ class PlayerControls extends PointerLockControls {
     this.moveRight(-this.velocity.x * delta);
     this.moveForward(-this.velocity.z * delta);
 
-    this.getObject().position.y += this.velocity.y * delta; // new behavior
+    // this.getObject().position.y += this.velocity.y * delta;
 
-    if (this.getObject().position.y < 10) {
-      this.velocity.y = 0;
-      this.getObject().position.y = 10;
+    // if (this.getObject().position.y < 10) {
+    //   this.velocity.y = 0;
+    //   this.getObject().position.y = 10;
 
-      this.canJump = true;
-    }
+    //   this.canJump = true;
+    // }
   }
 }
 
@@ -246,7 +233,7 @@ class Scene extends THREE.Scene {
   constructor() {
     super();
     this.background = new THREE.Color(0xffffff);
-    this.fog = new THREE.Fog(0xffffff, 0, 750);
+    // this.fog = new THREE.Fog(0xffffff, 0, 750);
 
     const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 2.5);
     light.position.set(0.5, 1, 0.75);
@@ -258,16 +245,42 @@ class Game {
   camera = new Camera();
   objects = new Objects();
 
+  physicsWorld = new CANNON.World({
+    gravity: new CANNON.Vec3(0, -19.8, 0),
+  });
+
+  groundBody = new CANNON.Body({
+    shape: new CANNON.Plane(),
+  });
+
+  boxBody = new CANNON.Body({
+    mass: 200,
+    shape: new CANNON.Box(new CANNON.Vec3(5, 5, 5)),
+  });
+
+  // radius = 10;
+  // shpere = new CANNON.Body({
+  //   mass: 1000,
+  //   shape: new CANNON.Sphere(this.radius),
+  // });
+
+  player = new CANNON.Body({
+    // mass: 10,
+    shape: new CANNON.Sphere(8),
+  });
+
   raycaster = new THREE.Raycaster(
     new THREE.Vector3(),
     new THREE.Vector3(0, -1, 0),
     0,
     10
   );
-  w;
+  floor;
+  boxMesh;
   scene;
   renderer;
   controls;
+  cannonDebugger;
 
   prevTime = performance.now();
 
@@ -277,23 +290,44 @@ class Game {
   }
 
   init() {
-    this.scene = new Scene();
-
-    this.controls = new PlayerControls(this.camera, body);
-    this.scene.add(this.controls.getObject());
-
-    const floor = new Floor();
-    this.scene.add(floor.floor);
-
-    const objects = new Objects();
-    this.scene.add(...objects.objects);
-
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     body.appendChild(this.renderer.domElement);
-
     window.addEventListener("resize", this.onWindowResize.bind(this));
+
+    this.controls = new PlayerControls(this.camera, body);
+
+    this.scene = new Scene();
+
+    this.floor = new Floor();
+
+    // const objects = new Objects();
+    // this.scene.add(...objects.objects);
+
+    const boxGeo = new THREE.BoxGeometry(10, 10, 10);
+    const boxMat = new THREE.MeshBasicMaterial({
+      color: "red",
+      opacity: 0.5,
+      transparent: true,
+    });
+    this.boxMesh = new THREE.Mesh(boxGeo, boxMat);
+
+    this.groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+
+    this.physicsWorld.addBody(this.groundBody);
+    this.physicsWorld.addBody(this.boxBody);
+    this.physicsWorld.addBody(this.player);
+
+    this.boxBody.position.set(0, 20, 0);
+    this.player.position.set(10, 40, 5);
+
+    this.scene.add(this.floor.mesh);
+    this.scene.add(this.boxMesh);
+
+    this.cannonDebugger = new CannonDebugger(this.scene, this.physicsWorld, {
+      color: "red",
+    });
   }
 
   onWindowResize() {
@@ -311,6 +345,16 @@ class Game {
       this.raycaster.ray.origin.y -= 10;
 
       const delta = (time - this.prevTime) / 1000;
+      // this.cannonDebugger.update();
+      this.physicsWorld.fixedStep();
+
+      this.floor.mesh.position.copy(this.groundBody.position);
+      this.floor.mesh.quaternion.copy(this.groundBody.quaternion);
+
+      this.boxMesh.position.copy(this.boxBody.position);
+      this.boxMesh.quaternion.copy(this.boxBody.quaternion);
+
+      this.player.position.copy(this.camera.position);
 
       this.controls.calculateMove(delta);
     }
