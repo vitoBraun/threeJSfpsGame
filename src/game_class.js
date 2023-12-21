@@ -11,6 +11,13 @@ const body = document.querySelector("body");
 
 const color = new THREE.Color();
 
+class Camera extends THREE.PerspectiveCamera {
+  constructor() {
+    super(75, window.innerWidth / window.innerHeight, 1, 1000);
+    this.position.y = 10;
+  }
+}
+
 class Floor {
   vertex = new THREE.Vector3();
   position;
@@ -63,195 +70,14 @@ class Floor {
   }
 }
 
-class PlayerControls {
-  moveForward = false;
-  moveBackward = false;
-  moveLeft = false;
-  moveRight = false;
-  canJump = false;
-  straif = false;
-  controls;
-  velocity = new THREE.Vector3();
-  direction = new THREE.Vector3();
-
-  constructor(controls) {
-    this.controls = controls;
-    this.init();
-  }
-
-  init() {
-    body.addEventListener("click", () => {
-      this.controls.lock();
-    });
-
-    body.addEventListener("dblclick", () => {
-      body.requestFullscreen();
-    });
-
-    this.controls.addEventListener("lock", () => {
-      instructions.style.display = "none";
-      blocker.style.display = "none";
-    });
-
-    this.controls.addEventListener("unlock", () => {
-      blocker.style.display = "block";
-      instructions.style.display = "";
-    });
-    body.addEventListener("keydown", this.onKeyDown.bind(this));
-    body.addEventListener("keyup", this.onKeyUp.bind(this));
-  }
-
-  onKeyDown(event) {
-    switch (event.code) {
-      case "KeyW":
-        this.moveForward = true;
-        break;
-
-      case "KeyA":
-        this.moveLeft = true;
-        break;
-
-      case "KeyS":
-        this.moveBackward = true;
-        break;
-
-      case "KeyD":
-        this.moveRight = true;
-        break;
-
-      case "Space":
-        if (this.canJump === true) this.velocity.y += 350;
-        this.canJump = false;
-        break;
-      case "ShiftLeft":
-        this.straif = true;
-        break;
-    }
-  }
-
-  onKeyUp(event) {
-    switch (event.code) {
-      case "KeyW":
-        this.moveForward = false;
-        break;
-
-      case "KeyA":
-        this.moveLeft = false;
-        break;
-
-      case "KeyS":
-        this.moveBackward = false;
-        break;
-
-      case "KeyD":
-        this.moveRight = false;
-        break;
-      case "ShiftLeft":
-        this.straif = false;
-        break;
-    }
-  }
-
-  calculateMove(delta, onObject) {
-    this.velocity.x -= this.velocity.x * 9.0 * delta;
-    this.velocity.z -= this.velocity.z * 9.0 * delta;
-
-    this.velocity.y -= 9.8 * MASS * delta;
-
-    this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
-    this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
-    this.direction.normalize(); // this ensures consistent movements in all directions
-
-    let speed = this.straif ? STRAIF_MOVE_SPEED : NORMAL_MOVE_SPEED;
-
-    if (this.moveForward || this.moveBackward)
-      this.velocity.z -= this.direction.z * speed * delta;
-    if (this.moveLeft || this.moveRight)
-      this.velocity.x -= this.direction.x * speed * delta;
-
-    if (onObject === true) {
-      this.velocity.y = Math.max(0, this.velocity.y);
-      this.canJump = true;
-    }
-
-    this.controls.moveRight(-this.velocity.x * delta);
-    this.controls.moveForward(-this.velocity.z * delta);
-
-    this.controls.getObject().position.y += this.velocity.y * delta; // new behavior
-
-    if (this.controls.getObject().position.y < 10) {
-      this.velocity.y = 0;
-      this.controls.getObject().position.y = 10;
-
-      this.canJump = true;
-    }
-  }
-}
-
-class Scene extends THREE.Scene {
-  constructor() {
-    super();
-    this.background = new THREE.Color(0xffffff);
-    this.fog = new THREE.Fog(0xffffff, 0, 750);
-
-    const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 2.5);
-    light.position.set(0.5, 1, 0.75);
-    this.add(light);
-  }
-}
-
-class Game {
-  camera;
-  scene;
-  renderer;
-  controls;
-  player;
-  playerBB;
-  playerControls;
+class Objects {
   objects = [];
-
-  raycaster;
-
-  prevTime = performance.now();
-
   constructor() {
-    this.init();
-    this.animate();
-  }
-
-  init() {
-    this.camera = new THREE.PerspectiveCamera(
-      75,
-      window.innerWidth / window.innerHeight,
-      1,
-      1000
-    );
-    this.camera.position.y = 10;
-
-    this.scene = new Scene();
-
-    this.controls = new PointerLockControls(this.camera, body);
-    this.playerControls = new PlayerControls(this.controls);
-    this.scene.add(this.controls.getObject());
-
-    this.raycaster = new THREE.Raycaster(
-      new THREE.Vector3(),
-      new THREE.Vector3(0, -1, 0),
-      0,
-      10
-    );
-
-    const floor = new Floor();
-    this.scene.add(floor.floor);
-
-    // objects
-
     const boxGeometry = new THREE.BoxGeometry(20, 20, 20).toNonIndexed();
-
-    floor.setPosition(boxGeometry.attributes.position);
+    let position = boxGeometry.attributes.position;
     const colorsBox = [];
 
-    for (let i = 0, l = floor.position.count; i < l; i++) {
+    for (let i = 0, l = position.count; i < l; i++) {
       color.setHSL(
         Math.random() * 0.3 + 0.5,
         0.75,
@@ -265,6 +91,8 @@ class Game {
       "color",
       new THREE.Float32BufferAttribute(colorsBox, 3)
     );
+
+    // let boxes = [];
 
     for (let i = 0; i < 500; i++) {
       const boxMaterial = new THREE.MeshPhongMaterial({
@@ -284,23 +112,181 @@ class Game {
       box.position.y = Math.floor(Math.random() * 20) * 20 + 10;
       box.position.z = Math.floor(Math.random() * 20 - 10) * 20;
 
-      this.scene.add(box);
       this.objects.push(box);
     }
+  }
+}
 
-    this.player = new THREE.Mesh(
-      new THREE.BoxGeometry(5, 10, 5, 10, 10, 10),
-      new THREE.MeshBasicMaterial({ color: "green", wireframe: true })
-    );
+class PlayerControls extends PointerLockControls {
+  moveForwardPress = false;
+  moveBackwardPress = false;
+  moveLeftPress = false;
+  moveRightPress = false;
+  canJump = false;
+  straif = false;
+  velocity = new THREE.Vector3();
+  direction = new THREE.Vector3();
 
-    this.player.position.x = this.camera.position.x;
-    this.player.position.y = 7;
-    this.player.position.z = this.camera.position.z;
+  constructor(camera, node) {
+    super(camera, node);
+    this.init();
+  }
 
-    this.playerBB = new THREE.Box3().setFromObject(this.player);
+  init() {
+    document.addEventListener("click", async () => {
+      await this.lock();
+    });
 
-    this.scene.add(this.player);
-    this.objects.push(this.player);
+    document.addEventListener("dblclick", () => {
+      body.requestFullscreen();
+    });
+
+    this.addEventListener("lock", () => {
+      instructions.style.display = "none";
+      blocker.style.display = "none";
+    });
+
+    this.addEventListener("unlock", () => {
+      blocker.style.display = "block";
+      instructions.style.display = "";
+    });
+    document.addEventListener("keydown", this.onKeyDown.bind(this));
+    document.addEventListener("keyup", this.onKeyUp.bind(this));
+  }
+
+  onKeyDown(event) {
+    switch (event.code) {
+      case "KeyW":
+        this.moveForwardPress = true;
+        break;
+
+      case "KeyA":
+        this.moveLeftPress = true;
+        break;
+
+      case "KeyS":
+        this.moveBackwardPress = true;
+        break;
+
+      case "KeyD":
+        this.moveRightPress = true;
+        break;
+
+      case "Space":
+        if (this.canJump === true) this.velocity.y += 350;
+        this.canJump = false;
+        break;
+      case "ShiftLeft":
+        this.straif = true;
+        break;
+    }
+  }
+
+  onKeyUp(event) {
+    switch (event.code) {
+      case "KeyW":
+        this.moveForwardPress = false;
+        break;
+
+      case "KeyA":
+        this.moveLeftPress = false;
+        break;
+
+      case "KeyS":
+        this.moveBackwardPress = false;
+        break;
+
+      case "KeyD":
+        this.moveRightPress = false;
+        break;
+      case "ShiftLeft":
+        this.straif = false;
+        break;
+    }
+  }
+
+  calculateMove(delta) {
+    this.velocity.x -= this.velocity.x * 9.0 * delta;
+    this.velocity.z -= this.velocity.z * 9.0 * delta;
+
+    this.velocity.y -= 9.8 * MASS * delta;
+
+    this.direction.z =
+      Number(this.moveForwardPress) - Number(this.moveBackwardPress);
+    this.direction.x = Number(this.moveRightPress) - Number(this.moveLeftPress);
+    this.direction.normalize(); // this ensures consistent movements in all directions
+
+    let speed = this.straif ? STRAIF_MOVE_SPEED : NORMAL_MOVE_SPEED;
+
+    if (this.moveForwardPress || this.moveBackwardPress)
+      this.velocity.z -= this.direction.z * speed * delta;
+    if (this.moveLeftPress || this.moveRightPress)
+      this.velocity.x -= this.direction.x * speed * delta;
+
+    // if (onObject === true) {
+    //   this.velocity.y = Math.max(0, this.velocity.y);
+    //   this.canJump = true;
+    // }
+
+    this.moveRight(-this.velocity.x * delta);
+    this.moveForward(-this.velocity.z * delta);
+
+    this.getObject().position.y += this.velocity.y * delta; // new behavior
+
+    if (this.getObject().position.y < 10) {
+      this.velocity.y = 0;
+      this.getObject().position.y = 10;
+
+      this.canJump = true;
+    }
+  }
+}
+
+class Scene extends THREE.Scene {
+  constructor() {
+    super();
+    this.background = new THREE.Color(0xffffff);
+    this.fog = new THREE.Fog(0xffffff, 0, 750);
+
+    const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 2.5);
+    light.position.set(0.5, 1, 0.75);
+    this.add(light);
+  }
+}
+
+class Game {
+  camera = new Camera();
+  objects = new Objects();
+
+  raycaster = new THREE.Raycaster(
+    new THREE.Vector3(),
+    new THREE.Vector3(0, -1, 0),
+    0,
+    10
+  );
+  w;
+  scene;
+  renderer;
+  controls;
+
+  prevTime = performance.now();
+
+  constructor() {
+    this.init();
+    this.animate();
+  }
+
+  init() {
+    this.scene = new Scene();
+
+    this.controls = new PlayerControls(this.camera, body);
+    this.scene.add(this.controls.getObject());
+
+    const floor = new Floor();
+    this.scene.add(floor.floor);
+
+    const objects = new Objects();
+    this.scene.add(...objects.objects);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
@@ -324,16 +310,9 @@ class Game {
       this.raycaster.ray.origin.copy(this.controls.getObject().position);
       this.raycaster.ray.origin.y -= 10;
 
-      const intersections = this.raycaster.intersectObjects(
-        this.objects,
-        false
-      );
-
-      const onObject = intersections.length > 0;
-
       const delta = (time - this.prevTime) / 1000;
 
-      this.playerControls.calculateMove(delta, onObject);
+      this.controls.calculateMove(delta);
     }
 
     this.prevTime = time;
