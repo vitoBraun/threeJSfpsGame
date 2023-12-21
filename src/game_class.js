@@ -192,7 +192,7 @@ class PlayerControls extends PointerLockControls {
     }
   }
 
-  calculateMove(delta) {
+  calculateMove(delta, onObject) {
     this.velocity.x -= this.velocity.x * 9.0 * delta;
     this.velocity.z -= this.velocity.z * 9.0 * delta;
 
@@ -210,22 +210,22 @@ class PlayerControls extends PointerLockControls {
     if (this.moveLeftPress || this.moveRightPress)
       this.velocity.x -= this.direction.x * speed * delta;
 
-    // if (onObject === true) {
-    //   this.velocity.y = Math.max(0, this.velocity.y);
-    //   this.canJump = true;
-    // }
+    if (onObject === true) {
+      this.velocity.y = Math.max(0, this.velocity.y);
+      this.canJump = true;
+    }
 
     this.moveRight(-this.velocity.x * delta);
     this.moveForward(-this.velocity.z * delta);
 
-    // this.getObject().position.y += this.velocity.y * delta;
+    this.getObject().position.y += this.velocity.y * delta;
 
-    // if (this.getObject().position.y < 10) {
-    //   this.velocity.y = 0;
-    //   this.getObject().position.y = 10;
+    if (this.getObject().position.y < 10) {
+      this.velocity.y = 0;
+      this.getObject().position.y = 10;
 
-    //   this.canJump = true;
-    // }
+      this.canJump = true;
+    }
   }
 }
 
@@ -258,15 +258,9 @@ class Game {
     shape: new CANNON.Box(new CANNON.Vec3(5, 5, 5)),
   });
 
-  // radius = 10;
-  // shpere = new CANNON.Body({
-  //   mass: 1000,
-  //   shape: new CANNON.Sphere(this.radius),
-  // });
-
   player = new CANNON.Body({
-    // mass: 10,
-    shape: new CANNON.Sphere(8),
+    // mass: 70,
+    shape: new CANNON.Box(new CANNON.Vec3(2, 5, 2)),
   });
 
   raycaster = new THREE.Raycaster(
@@ -308,7 +302,7 @@ class Game {
     const boxGeo = new THREE.BoxGeometry(10, 10, 10);
     const boxMat = new THREE.MeshBasicMaterial({
       color: "red",
-      opacity: 0.5,
+      opacity: 0.9,
       transparent: true,
     });
     this.boxMesh = new THREE.Mesh(boxGeo, boxMat);
@@ -344,8 +338,14 @@ class Game {
       this.raycaster.ray.origin.copy(this.controls.getObject().position);
       this.raycaster.ray.origin.y -= 10;
 
+      const intersections = this.raycaster.intersectObjects(
+        this.boxBody,
+        false
+      );
+
+      const onObject = intersections.length > 0;
       const delta = (time - this.prevTime) / 1000;
-      // this.cannonDebugger.update();
+      this.cannonDebugger.update();
       this.physicsWorld.fixedStep();
 
       this.floor.mesh.position.copy(this.groundBody.position);
@@ -356,7 +356,7 @@ class Game {
 
       this.player.position.copy(this.camera.position);
 
-      this.controls.calculateMove(delta);
+      this.controls.calculateMove(delta, onObject);
     }
 
     this.prevTime = time;
