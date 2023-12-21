@@ -2,7 +2,7 @@ import * as THREE from "three";
 
 import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
 
-let camera, scene, renderer, controls;
+let camera, scene, renderer, controls, player, playerBB;
 
 const objects = [];
 
@@ -51,8 +51,11 @@ function init() {
   const instructions = document.getElementById("instructions");
   const body = document.querySelector("body");
   body.addEventListener("click", function () {
-    body.requestFullscreen();
     controls.lock();
+  });
+
+  body.addEventListener("dblclick", () => {
+    body.requestFullscreen();
   });
 
   controls.addEventListener("lock", function () {
@@ -216,14 +219,24 @@ function init() {
     objects.push(box);
   }
 
-  //
+  player = new THREE.Mesh(
+    new THREE.BoxGeometry(5, 10, 5, 10, 10, 10),
+    new THREE.MeshBasicMaterial({ color: "green", wireframe: true })
+  );
+
+  player.position.x = camera.position.x;
+  player.position.y = 7;
+  player.position.z = camera.position.z;
+
+  playerBB = new THREE.Box3().setFromObject(player);
+
+  scene.add(player);
+  objects.push(player);
 
   renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
-
-  //
 
   window.addEventListener("resize", onWindowResize);
 }
@@ -280,6 +293,10 @@ function animate() {
 
       canJump = true;
     }
+
+    // player.position.x = camera.position.x;
+    // player.position.z = camera.position.z;
+    // player.position.y = camera.position.y - 3;
   }
 
   prevTime = time;
